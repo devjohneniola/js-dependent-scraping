@@ -10,6 +10,7 @@ const scrapeTripAdvisor = async () => {
   if (!page) return;
 
   await page.setDefaultTimeout(60000);
+  await page.setDefaultNavigationTimeout(60000);
 
   // Flow 2 => Visiting TripAdvisor's home page
   const url = "https://www.tripadvisor.com/";
@@ -40,12 +41,17 @@ const scrapeTripAdvisor = async () => {
     }
 
     // Flow 4 => Clicking the Continue with Email button
+    const authFrame = page
+      .frames()
+      .find((frame) => /RegistrationController/i.test(frame.url()));
+
     try {
-      const continueBtn = await page.waitForSelector(".regEmailContinue");
+      const continueBtn = await authFrame.waitForSelector(".regEmailContinue");
       await continueBtn.click();
       console.log("Clicked Continue with Email button");
     } catch (e) {
       console.error("Unable to click the Continue with Email button", e);
+      await page.waitFor(60000);
       return;
     }
 
@@ -58,29 +64,35 @@ const scrapeTripAdvisor = async () => {
 
     // Flow 6 => Filling in the authentication details
     try {
-      const emailField = await page.waitForSelector("#regSignIn.email");
+      const emailField = await authFrame.waitForSelector(
+        '#regSignIn input[type="email"]'
+      );
       await emailField.click({ clickCount: 3 });
       await emailField.type(tripAdvisorEmail, { delay: 75 });
       console.log("Filled in email");
     } catch (e) {
       console.error("Unable to write to the email field", e);
+      return;
     }
 
     try {
-      const passField = await page.waitForSelector("#regSignIn.password");
+      const passField = await authFrame.waitForSelector(
+        '#regSignIn input[type="password"]'
+      );
       await passField.click({ clickCount: 3 });
       await passField.type(tripAdvisorPassword, { delay: 75 });
       console.log("Filled in password");
     } catch (e) {
       console.error("Unable to write to the password field", e);
+      return;
     }
 
     // Flow 7 => Solving Captchas
-    const axios = require("axios");
 
-    const initCaptchaSolvingTask = (siteKey, url) => {
+    const initCaptchaSolvingTask = (method, siteKey, pageUrl) => {
+      const axios = require("axios");
       return new Promise((resolve, reject) => {
-        const url = `https://2captcha.com/in.php?key=${_2CaptchaAPIKey}&method=userrecaptcha&googlekey=${siteKey}&pageurl=${url}invisible=1&soft_id=9120555`;
+        const url = `https://2captcha.com/in.php?key=${_2CaptchaAPIKey}&method=${method}&googlekey=${siteKey}&pageurl=${pageUrl}&soft_id=9120555`;
         return axios
           .get(url, { responseType: "text" })
           .then(({ data }) => resolve(data))
@@ -94,12 +106,13 @@ const scrapeTripAdvisor = async () => {
     let solveRetryTimes = 0;
     const maxRetryTimes = 5;
 
-    const getCaptchaSolution = () => {
-      const url = `https://2captcha.com/res.php?key=${_2CaptchaAPIKey}&action=get&id=${initCaptcha}`;
+    const getCaptchaSolution = (taskId) => {
+      const url = `https://2captcha.com/res.php?key=${_2CaptchaAPIKey}&action=get&id=${taskId}`;
       const waitTime = 20000; // 20 seconds
 
       return new Promise((resolve, reject) => {
         setTimeout(() => {
+          const axios = require("axios");
           axios
             .get(url, { responseType: "text" })
             .then(({ data }) => {
@@ -140,7 +153,11 @@ const scrapeTripAdvisor = async () => {
     };
 
     try {
-      let initTaskId = await initCaptchaSolvingTask(siteKey, url);
+      const method = "userecaptcha";
+      const siteKey = "6LceRwATAAAAAJieJ3O-iiDDW7s4TFID7OjF2Ztw";
+      const pageUrl =
+        "https://www.tripadvisor.com/RegistrationController?flow=sign_up_and_save&flowOrigin=login&pid=40486&hideNavigation=true&userRequestedForce=true&returnTo=&locationId=-1";
+      const initTaskId = await initCaptchaSolvingTask(method, siteKey, pageUrl);
       console.log("2Captcha Task ID " + initTaskId);
       if (!isOk(initTaskId)) {
         console.error("Could not start the captcha solving process");
@@ -148,17 +165,26 @@ const scrapeTripAdvisor = async () => {
       }
 
       // remove "OK|" at the start of the initTaskId
-      initTaskId = await initTaskId.substr(3);
+      const taskId = await initTaskId.substr(3);
 
-      let captchaSolution = await getCaptchaSolution();
+      let captchaSolution = await getCaptchaSolution(taskId);
       console.log("only a moment to go...");
 
       // remove "OK|" at the start of the captchaSolution
       captchaSolution = await captchaSolution.substr(3);
 
-      // 2Captcha provides you with a submit to use the captchaSolution and submit the form to sign in. Bear in mind that you will be using the page.evaluate function here
+      await authFrame.type("#g-recaptcha-response", captchaSolution);
+      await authFrame.evaluate(() =>
+        ___grecaptcha_cfg.clients[0].J.J.callback()
+      );
     } catch (e) {
       console.error("Unable to solve captcha and login", e);
+    }
+
+    try {
+      await authFrame.click("#regSignIn .regSubmitBtn");
+    } catch (e) {
+      console.error("Could not click the login button", e);
     }
   };
 

@@ -22,7 +22,7 @@ const launchChrome = async () => {
   let chrome;
   try {
     chrome = await puppeteer.launch({
-      headless: true, // run in headless mode
+      headless: false, // run in headless mode
       devtools: false, // disable dev tools
       ignoreHTTPSErrors: true, // ignore https error
       args,
