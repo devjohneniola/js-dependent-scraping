@@ -10,7 +10,7 @@ const scrapeTripAdvisor = async () => {
   if (!page) return;
 
   await page.setDefaultTimeout(60000);
-  await page.setDefaultNavigationTimeout(60000);
+  await page.setDefaultNavigationTimeout(120000);
 
   // Flow 2 => Visiting TripAdvisor's home page
   const url = "https://www.tripadvisor.com/";
@@ -148,7 +148,6 @@ const scrapeTripAdvisor = async () => {
 
     const isOk = (val) => {
       const isOk = val.indexOf("OK") === 0;
-      if (!isOk) console.error("could not proceed with solving captcha");
       return isOk;
     };
 
@@ -158,11 +157,8 @@ const scrapeTripAdvisor = async () => {
       const pageUrl =
         "https://www.tripadvisor.com/RegistrationController?flow=sign_up_and_save&flowOrigin=login&pid=40486&hideNavigation=true&userRequestedForce=true&returnTo=&locationId=-1";
       const initTaskId = await initCaptchaSolvingTask(method, siteKey, pageUrl);
-      console.log("2Captcha Task ID " + initTaskId);
-      if (!isOk(initTaskId)) {
-        console.error("Could not start the captcha solving process");
-        return;
-      }
+      // console.log("2Captcha Task ID " + initTaskId);
+      if (!isOk(initTaskId)) return;
 
       // remove "OK|" at the start of the initTaskId
       const taskId = await initTaskId.substr(3);
@@ -204,6 +200,7 @@ const scrapeTripAdvisor = async () => {
 
   // Flow 9 => Typing London
   try {
+    await page.waitFor(2500); // wait a bit before typing
     await page.keyboard.type("London");
     console.log("Typed London");
   } catch (e) {
@@ -279,7 +276,7 @@ const scrapeTripAdvisor = async () => {
   })();
 
   // Flow 14 => Saving extracted hotels to a CSV file
-  (async () => {
+  await (async () => {
     const fileName = "extracted-data/hotels.csv";
     const ObjectsToCsv = require("objects-to-csv");
     const csv = new ObjectsToCsv(hotelsInfo);
